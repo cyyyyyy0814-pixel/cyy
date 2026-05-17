@@ -541,11 +541,6 @@ export default function App() {
           {currentPage === 'history' && renderHistory()}
         </AnimatePresence>
       </main>
-
-      {/* Footer */}
-      <footer className="py-8 border-t border-slate-100 text-center text-slate-400 text-sm">
-        <p>© 2026 MindEase. Designed with care for your mental well-being.</p>
-      </footer>
     </div>
   );
 }
