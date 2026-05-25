@@ -16,40 +16,26 @@ import {
   Minus,
   ArrowRight,
   RefreshCcw,
-  Trash2
+  Trash2,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
-
-// --- Types ---
-
-type Emotion = 'Stress' | 'Sadness' | 'Happiness' | 'Neutral';
-
-interface AnalysisResult {
-  id: string;
-  timestamp: number;
-  text: string;
-  emotion: Emotion;
-  feedback: string;
-  suggestion: string;
-}
-
-type Page = 'home' | 'analysis' | 'history';
-type TimeRange = 'all' | 'week' | 'month' | 'year';
+import { Emotion, AnalysisResult, Page, TimeRange } from './types';
+import EmotionDashboard from './components/EmotionDashboard';
 
 // --- Constants ---
 
 const EMOTION_COLORS: Record<Emotion, string> = {
   Stress: 'bg-orange-100 text-orange-700 border-orange-200',
-  Sadness: 'bg-blue-100 text-blue-700 border-blue-200',
-  Happiness: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  Sad: 'bg-blue-100 text-blue-700 border-blue-200',
+  Happy: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   Neutral: 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
 const EMOTION_ICONS: Record<Emotion, React.ReactNode> = {
   Stress: <Zap className="w-6 h-6" />,
-  Sadness: <Frown className="w-6 h-6" />,
-  Happiness: <Smile className="w-6 h-6" />,
+  Sad: <Frown className="w-6 h-6" />,
+  Happy: <Smile className="w-6 h-6" />,
   Neutral: <Minus className="w-6 h-6" />,
 };
 
@@ -87,57 +73,25 @@ export default function App() {
     setResult(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      const model = "gemini-3-flash-preview";
-      
-      const prompt = `
-        Analyze the following text and detect the user's emotional state.
-        Classify it into exactly one of these categories: Stress, Sadness, Happiness, Neutral.
-        
-        CRITICAL: Use VERY SIMPLE English. Avoid big or difficult words. 
-        The goal is to be clear and easy to read so the user does not feel more stressed by hard words.
-        
-        Provide:
-        1. A deeply empathetic, thoughtful feedback message (2-3 sentences) that validates the user's feelings using simple words.
-        2. A set of 2-3 practical, actionable, and encouraging support suggestions tailored specifically to the detected emotion using simple words.
-        
-        For the suggestions, choose the most helpful types from these categories:
-        - Immediate coping strategies: Quick, easy things to do right now (like a short walk or a breathing exercise).
-        - Psychoeducation: A simple note to show that this feeling is normal (like "it is okay to feel stressed before a test").
-        - Reframing prompts: A simple question to help think in a better way (like "what is one good thing that happened today?").
-        - Resource referrals: Mention help lines or counseling if the user sounds very upset.
-        - Social connection nudges: A simple tip to talk to a friend or family member.
-        - Mindfulness & grounding: Simple exercises to feel more calm (like the 5-4-3-2-1 rule).
-        - Routine & lifestyle reminders: Gentle tips about sleep, water, or moving your body.
-        - Affirmations: Short, kind words to help the user feel better about themselves.
-        
-        Text: "${inputText}"
-        
-        Return the result as a JSON object with the following structure:
-        {
-          "emotion": "Stress" | "Sadness" | "Happiness" | "Neutral",
-          "feedback": "Simple empathetic feedback",
-          "suggestion": "Simple practical suggestions"
-        }
-      `;
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-        }
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: inputText }),
       });
 
-      const data = JSON.parse(response.text || '{}');
-      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.error || "Analysis failed");
+      }
+      const data = await response.json();
+
       const newResult: AnalysisResult = {
         id: Math.random().toString(36).substring(7),
         timestamp: Date.now(),
         text: inputText,
-        emotion: data.emotion || 'Neutral',
-        feedback: data.feedback || 'We hear you.',
-        suggestion: data.suggestion || 'Take a deep breath and be kind to yourself.'
+        emotion: data.emotion as Emotion,
+        feedback: data.feedback,
+        suggestion: data.suggestion
       };
 
       setResult(newResult);
@@ -145,7 +99,6 @@ export default function App() {
       setInputText('');
     } catch (error) {
       console.error("Analysis failed:", error);
-      // Fallback mock logic if API fails
       const mockResult: AnalysisResult = {
         id: Math.random().toString(36).substring(7),
         timestamp: Date.now(),
@@ -165,6 +118,55 @@ export default function App() {
     if (confirm("Are you sure you want to clear your history?")) {
       setHistory([]);
     }
+  };
+
+  const handleSeedDemoData = () => {
+    const now = Date.now();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    const predefinedLogSamples = [
+      { text: "Had an amazing morning walk under the bright sun, feeling fully recharged.", emotion: 'Happy' as Emotion, feedback: "Splendid! Nature walking is an exceptional way to restore your physical core.", suggestion: "Enjoy this bright streak. Consider maintaining standard morning walks." },
+      { text: "Got an outstanding grade on my final project! All the work paid off.", emotion: 'Happy' as Emotion, feedback: "Fantastic! Your deep, sustained efforts have yielded deserved success.", suggestion: "Celebrate your milestone. Appreciate your effort and commitment." },
+      { text: "Spent quality time with some close childhood friends over dinner tonight.", emotion: 'Happy' as Emotion, feedback: "Beautiful! Constructive social circles build thick emotional insulation.", suggestion: "Keep nourishing these supportive links; planning another meetup." },
+      { text: "Had a highly relaxing evening reading a book with some warm tea.", emotion: 'Happy' as Emotion, feedback: "Lovely. Unwinding calmly helps consolidate your physical resilience.", suggestion: "Continue setting aside regular time for quiet hobbies like reading." },
+      { text: "Successfully finished sketching my new drawing. Felt highly creative.", emotion: 'Happy' as Emotion, feedback: "Wonderful. Art permits excellent alignment of creative thoughts.", suggestion: "Keep painting or sketching; it is a profound therapy channel." },
+      
+      { text: "The deadlines are piling up. I have three assignments due this Friday and I'm stressed.", emotion: 'Stress' as Emotion, feedback: "That sounds heavy, but remember that you can conquer this piece by piece.", suggestion: "Divide tasks into micro-deliverables. Take regular 5-minute deep breath breaks." },
+      { text: "Struggling to sleep because my mind is race tracking with exam anxiety.", emotion: 'Stress' as Emotion, feedback: "We hear you. Racing thoughts before sleep show standard exam pressure.", suggestion: "Try the 5-4-3-2-1 technique or write down all tasks on paper before bed." },
+      { text: "Very frustrated by the constant project changes. It feels too overwhelming.", emotion: 'Stress' as Emotion, feedback: "It is natural to feel stressed when targets shift constantly.", suggestion: "Focus strictly on what is under your control today; request structural sync." },
+      { text: "Can't find my keys and I'm already late for my presentation.", emotion: 'Stress' as Emotion, feedback: "Panic spikes make organizing logical thoughts difficult.", suggestion: "Reset with three deep diaphragmatic breaths. Slow down; safety comes first." },
+      { text: "Too much work stacked this weekend, feeling some burnout creep in.", emotion: 'Stress' as Emotion, feedback: "Burnout is a direct plea from your body requesting profound rest.", suggestion: "Set tight boundaries around work hours. Take a short walk or stretch." },
+
+      { text: "I've been feeling deeply lonely lately, missing companionship.", emotion: 'Sad' as Emotion, feedback: "Loneliness is a heavy weight, but your feelings are fully validated.", suggestion: "Gently connect with an old peer or try writing down your raw thoughts." },
+      { text: "Had a major disagreement with my cousin, feeling very down today.", emotion: 'Sad' as Emotion, feedback: "Conflict with loved ones creates temporary emotional wounds.", suggestion: "Give yourself time to heal. It is completely okay to feel sad." },
+      { text: "Feeling like I failed to meet everyone's high expectations.", emotion: 'Sad' as Emotion, feedback: "You are enough exactly as you are. Expectations build unfair pressure.", suggestion: "Extend kindness to yourself. You are doing the absolute best you can." },
+      { text: "Disappointed that our long-planned holiday trip got cancelled.", emotion: 'Sad' as Emotion, feedback: "Disappointment can feel highly disheartening. We hear you.", suggestion: "Treat yourself to a small local dish or favorite activity today." },
+      { text: "Woke up with an inexplicable heavy emotion, missing my hometown.", emotion: 'Sad' as Emotion, feedback: "Nostalgia and homesickness are beautiful, heavy emotions.", suggestion: "Call a family member if possible, or browse old comforting pictures." },
+
+      { text: "Ate lunch and did response emails. Standard quiet office morning.", emotion: 'Neutral' as Emotion, feedback: "Stable, calm, and grounded. This offers high daily daily peace.", suggestion: "Keep ticking off tasks steadily. Drink a glass of water." },
+      { text: "Bought some household grocery items and cleaned up the kitchen desk.", emotion: 'Neutral' as Emotion, feedback: "Tidying up establishes order and peace in your surroundings.", suggestion: "Notice the comfort of neat, ordered environments." },
+      { text: "Just waiting for the bus to arrive. Listening to a calm podcast.", emotion: 'Neutral' as Emotion, feedback: "Grounded in the present moment. Podcast learning is wonderful.", suggestion: "Rest your eyes while riding; take in the view from the window." },
+      { text: "Doing some laundry while watching a nature documentary.", emotion: 'Neutral' as Emotion, feedback: "Calm weekend routines help restore structural body balance.", suggestion: "Squeeze in a 2-minute soft stretch between loads." },
+      { text: "Attended normal class lectures today. Took some quick summaries.", emotion: 'Neutral' as Emotion, feedback: "Splendid work accumulating educational concepts.", suggestion: "Review key notes later, then shut the books for high-quality rest." }
+    ];
+
+    const distributedLogs = predefinedLogSamples.map((sample, index) => {
+      const daysAgo = Math.floor((index / predefinedLogSamples.length) * 26);
+      const randomHourOffset = Math.floor(Math.random() * 8) * 60 * 60 * 1000;
+      const timestamp = now - (daysAgo * oneDayMs) - randomHourOffset;
+
+      return {
+        id: `seeded-${index}-${Math.random().toString(36).substring(4)}`,
+        timestamp,
+        text: sample.text,
+        emotion: sample.emotion,
+        feedback: sample.feedback,
+        suggestion: sample.suggestion
+      };
+    });
+
+    distributedLogs.sort((b, a) => b.timestamp - a.timestamp);
+    setHistory(distributedLogs);
   };
 
   const deleteHistoryItem = (id: string) => {
@@ -511,6 +513,7 @@ export default function App() {
               { id: 'home', label: 'Home', icon: <Home className="w-4 h-4" /> },
               { id: 'analysis', label: 'Analysis', icon: <Send className="w-4 h-4" /> },
               { id: 'history', label: 'History', icon: <History className="w-4 h-4" /> },
+              { id: 'dashboard', label: 'Dashboard', icon: <Activity className="w-4 h-4" /> },
             ].map((nav) => (
               <button
                 key={nav.id}
@@ -527,8 +530,9 @@ export default function App() {
 
           {/* Mobile Nav Toggle (Simplified for this demo) */}
           <div className="md:hidden flex gap-4">
-             <button onClick={() => setCurrentPage('analysis')} className="p-2 text-slate-500"><Send className="w-5 h-5" /></button>
-             <button onClick={() => setCurrentPage('history')} className="p-2 text-slate-500"><History className="w-5 h-5" /></button>
+             <button onClick={() => setCurrentPage('analysis')} className="p-2 text-slate-500" title="Analysis"><Send className="w-5 h-5" /></button>
+             <button onClick={() => setCurrentPage('history')} className="p-2 text-slate-500" title="History"><History className="w-5 h-5" /></button>
+             <button onClick={() => setCurrentPage('dashboard')} className="p-2 text-slate-500" title="Dashboard"><Activity className="w-5 h-5" /></button>
           </div>
         </div>
       </nav>
@@ -539,6 +543,14 @@ export default function App() {
           {currentPage === 'home' && renderHome()}
           {currentPage === 'analysis' && renderAnalysis()}
           {currentPage === 'history' && renderHistory()}
+          {currentPage === 'dashboard' && (
+            <EmotionDashboard 
+              history={history} 
+              onSeedDemoData={handleSeedDemoData}
+              onClearHistory={clearHistory}
+              onNavigateToAnalysis={() => setCurrentPage('analysis')} 
+            />
+          )}
         </AnimatePresence>
       </main>
     </div>
